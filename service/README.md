@@ -193,7 +193,7 @@ Create a dedicated service account and grant the minimal roles to call Vertex AI
    ```bash
    CALLER_SA_EMAIL="caller-sa@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com"
 
-   gcloud run services add-iam-policy-binding document-analyzer \
+   gcloud run services add-iam-policy-binding ai-document-analyzer \
      --region="$GOOGLE_CLOUD_LOCATION" \
      --member="serviceAccount:$CALLER_SA_EMAIL" \
      --role="roles/run.invoker"
@@ -209,7 +209,7 @@ REGION="$GOOGLE_CLOUD_LOCATION"
 SERVICE_ACCOUNT_ID="${SERVICE_ACCOUNT_ID:-gemini-extractor-sa}"
 SA_EMAIL="${SERVICE_ACCOUNT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-gcloud run deploy document-analyzer \
+gcloud run deploy ai-document-analyzer \
   --region "$REGION" \
   --source service \
   --service-account "$SA_EMAIL" \
@@ -226,11 +226,11 @@ PROJECT_ID="$GOOGLE_CLOUD_PROJECT"
 REGION="$GOOGLE_CLOUD_LOCATION"
 SERVICE_ACCOUNT_ID="${SERVICE_ACCOUNT_ID:-gemini-extractor-sa}"
 SA_EMAIL="${SERVICE_ACCOUNT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
-IMAGE="gcr.io/$PROJECT_ID/document-analyzer"
+IMAGE="gcr.io/$PROJECT_ID/ai-document-analyzer"
 
 gcloud builds submit --tag "$IMAGE" service
 
-gcloud run deploy document-analyzer \
+gcloud run deploy ai-document-analyzer \
   --region "$REGION" \
   --image "$IMAGE" \
   --service-account "$SA_EMAIL" \
@@ -250,7 +250,7 @@ and `gcloud` to obtain an **identity token**.
 
    ```bash
    REGION="$GOOGLE_CLOUD_LOCATION"
-   SERVICE_URL=$(gcloud run services describe document-analyzer \
+   SERVICE_URL=$(gcloud run services describe ai-document-analyzer \
      --region "$REGION" \
      --format 'value(status.url)')
    echo "$SERVICE_URL"
@@ -278,7 +278,7 @@ and `gcloud` to obtain an **identity token**.
      }' | jq .
    ```
 
-As long as the calling service account has the `run.invoker` role on `document-analyzer`,
+As long as the calling service account has the `run.invoker` role on `ai-document-analyzer`,
 this request will be authenticated by Cloud Run and reach your Flask app.
 
 ## Events Router (Pub/Sub Push)
