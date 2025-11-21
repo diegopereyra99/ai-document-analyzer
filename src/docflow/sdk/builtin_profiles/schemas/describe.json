@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "document_type": {
+      "type": "string",
+      "description": "Short label for the document type (invoice, receipt, contract, report, etc.)."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Concise description (2-4 sentences) of the document contents."
+    }
+  },
+  "required": ["document_type", "summary"]
+}

@@ -1,0 +1,26 @@
+[project]
+name = "docflow"
+version = "0.1.0"
+description = "Schema-driven document extraction toolkit"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "google-cloud-aiplatform",
+  "typer>=0.9",
+  "PyYAML",
+  "requests",
+  "openpyxl",
+  "tomli; python_version < '3.11'",
+]
+
+[project.scripts]
+docflow = "docflow.sdk.cli.main:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"docflow.sdk.builtin_profiles" = ["**/*"]

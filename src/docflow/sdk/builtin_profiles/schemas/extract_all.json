@@ -1,0 +1,88 @@
+{
+  "type": "object",
+  "properties": {
+    "campos_globales": {
+      "type": "array",
+      "description": "Campos que describen el documento en general o información que no pertenece claramente a un registro repetido.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nombre_original": {
+            "type": "string",
+            "description": "Texto cercano al valor en el documento (etiqueta, encabezado, nombre de campo, etc.), si existe."
+          },
+          "nombre_normalizado": {
+            "type": "string",
+            "description": "Nombre canónico del campo en español, en minúsculas y con guiones bajos. Si no hay un nombre razonable, usar valores como 'campo_001', 'campo_002', etc."
+          },
+          "valor": {
+            "type": "string",
+            "description": "Contenido extraído en forma de texto."
+          },
+          "tipo_valor": {
+            "type": "string",
+            "description": "Clasificación simple del tipo de valor: 'texto', 'numero', 'fecha', 'porcentaje', 'moneda', 'codigo', 'booleano', 'otro', etc."
+          },
+          "pagina": {
+            "type": "number",
+            "description": "Número de página donde se encontró el valor, cuando sea aplicable."
+          }
+        },
+        "required": ["nombre_normalizado", "valor"]
+      }
+    },
+    "conjuntos_registros": {
+      "type": "array",
+      "description": "Grupos de registros repetidos con estructura similar (por ejemplo filas de tablas o listas de elementos).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tipo_registro": {
+            "type": "string",
+            "description": "Descripción en español del tipo de registro, por ejemplo: 'items', 'filas_tabla', 'registros_repetidos', etc."
+          },
+          "registros": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "indice_registro": {
+                  "type": "number",
+                  "description": "Índice 1..N que identifica el registro dentro del conjunto."
+                },
+                "campos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "nombre_original": {
+                        "type": "string",
+                        "description": "Texto cercano al valor en el documento (etiqueta, encabezado, nombre de columna, etc.), si existe."
+                      },
+                      "nombre_normalizado": {
+                        "type": "string",
+                        "description": "Nombre canónico del campo en español, en minúsculas y con guiones bajos. Debe ser consistente entre registros del mismo tipo."
+                      },
+                      "valor": {
+                        "type": "string",
+                        "description": "Contenido extraído en forma de texto."
+                      },
+                      "tipo_valor": {
+                        "type": "string",
+                        "description": "Clasificación simple del tipo de valor: 'texto', 'numero', 'fecha', 'porcentaje', 'moneda', 'codigo', etc."
+                      }
+                    },
+                    "required": ["nombre_normalizado", "valor"]
+                  }
+                }
+              },
+              "required": ["indice_registro", "campos"]
+            }
+          }
+        },
+        "required": ["tipo_registro", "registros"]
+      }
+    }
+  },
+  "required": ["campos_globales", "conjuntos_registros"]
+}

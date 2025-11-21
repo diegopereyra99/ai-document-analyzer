@@ -1,0 +1,5 @@
+Provide a concise description of the document.
+
+- Identify the document type (invoice, receipt, contract, report, form, etc.).
+- Summarize the main content in 2-4 sentences.
+- Use null for any missing information and return only valid JSON.

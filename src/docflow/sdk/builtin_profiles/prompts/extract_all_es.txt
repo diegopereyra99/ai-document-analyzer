@@ -1,0 +1,11 @@
+Analiza el/los documento(s) proporcionado(s) y extrae la mayor cantidad de información posible.
+
+Organiza toda la información siguiendo estrictamente el esquema JSON indicado:
+
+- Coloca en "campos_globales" los campos que describen el documento en general
+  o cualquier información que no pertenezca claramente a un registro repetido.
+- Identifica estructuras repetidas (por ejemplo filas de tablas, listas de elementos, bloques similares)
+  y represéntalas dentro de "conjuntos_registros", agrupando cada repetición como un registro separado.
+- Usa nombres normalizados en español y en formato con guiones bajos. Si no puedes inferir un nombre razonable,
+  utiliza nombres genéricos "campo_001", "campo_002", etc.
+- Devuelve únicamente un JSON válido que cumpla con el esquema, sin ningún texto adicional.
