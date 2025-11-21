@@ -3,12 +3,20 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import warnings
 from typing import Any, Dict, Tuple
 
 from .. import config
 from ..errors import ProviderError
 from ..models.schema_defs import Field, InternalSchema
 from .base import ModelProvider, ProviderOptions
+
+# Suppress noisy Vertex deprecation warning for genai SDK (ignore all UserWarning from module)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="vertexai.generative_models._generative_models",
+)
 
 
 def _map_type(field_type: str) -> str:
