@@ -145,6 +145,7 @@ def init(
     base_url: str = typer.Option("", "--base-url", help="Default service endpoint"),
     default_output_format: str = typer.Option("json", "--default-output-format", help="Default output format"),
     default_output_dir: Path = typer.Option(Path("./outputs"), "--default-output-dir", help="Default output directory"),
+    profile_dir: Optional[Path] = typer.Option(None, "--profiles-dir", help="Profiles root (catalog-style)"),
 ) -> None:
     context: Context = ctx.obj
     cfg_dir = DEFAULT_CONFIG_PATH.parent
@@ -157,70 +158,10 @@ def init(
     lines.append(f"default_output_format = \"{default_output_format}\"")
     if default_output_dir:
         lines.append(f"default_output_dir = \"{default_output_dir}\"")
+    if profile_dir:
+        lines.append(f"profile_dir = \"{profile_dir}\"")
     DEFAULT_CONFIG_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
     typer.echo(f"Wrote TOML config to {DEFAULT_CONFIG_PATH}")
-
-
-@app.command()
-def extract(
-    ctx: typer.Context,
-    schema: Optional[Path] = typer.Option(None, "--schema", help="Path to schema file"),
-    all_fields: bool = typer.Option(False, "--all", help="Schema-less extraction"),
-    multi: str = typer.Option("per_file", "--multi", help="per_file|aggregate|both"),
-    base_url: str = typer.Option("", "--base-url", help="Remote service base URL"),
-    mode: Optional[str] = typer.Option(None, "--mode", help="local or remote"),
-    output_format: Optional[str] = typer.Option(None, "--output-format", help="print|json|excel"),
-    output_path: Optional[Path] = typer.Option(None, "--output-path", help="Write output to file"),
-    files: List[Path] = typer.Argument(..., exists=False, readable=False, help="Document files"),
-) -> None:
-    context: Context = ctx.obj
-    effective_mode = mode or context.config.mode
-    if not all_fields and schema is None:
-        typer.echo("--schema is required unless --all is specified", err=True)
-        raise typer.Exit(code=1)
-    if all_fields and schema is not None:
-        typer.echo("--schema and --all are mutually exclusive", err=True)
-        raise typer.Exit(code=1)
-    if effective_mode == "remote":
-        typer.echo("Schema-based extraction is only supported in local mode. Use `run` with a profile for remote calls.", err=True)
-        raise typer.Exit(code=1)
-
-    cfg_output_format = output_format or context.config.default_output_format
-    context.output_path = output_path
-
-    client = _make_client(context, mode=effective_mode, base_url=base_url or None)
-
-    try:
-        if all_fields:
-            result = client.extract_all([str(p) for p in files], multi_mode=multi)
-        else:
-            schema_dict = load_structured(schema)
-            result = client.extract(schema_dict, [str(p) for p in files], multi_mode=multi)
-    except (ConfigError, RemoteServiceError, DocumentError, ProviderError, ExtractionError, FileNotFoundError) as exc:
-        _handle_exc(exc)
-
-    _print_output(result, cfg_output_format, output_path)
-
-
-@app.command()
-def describe(
-    ctx: typer.Context,
-    multi: str = typer.Option("per_file", "--multi", help="per_file|aggregate|both"),
-    base_url: str = typer.Option("", "--base-url", help="Remote service base URL"),
-    mode: Optional[str] = typer.Option(None, "--mode", help="local or remote"),
-    output_format: Optional[str] = typer.Option(None, "--output-format", help="print|json|excel"),
-    output_path: Optional[Path] = typer.Option(None, "--output-path", help="Write output to file"),
-    files: List[Path] = typer.Argument(..., help="Document files"),
-) -> None:
-    context: Context = ctx.obj
-    effective_mode = mode or context.config.mode
-    cfg_output_format = output_format or context.config.default_output_format
-    client = _make_client(context, mode=effective_mode, base_url=base_url or None)
-    try:
-        result = client.describe([str(p) for p in files], multi_mode=multi)
-    except (ConfigError, RemoteServiceError, DocumentError, ProviderError, ExtractionError, FileNotFoundError) as exc:
-        _handle_exc(exc)
-    _print_output(result, cfg_output_format, output_path)
 
 
 @app.command()
@@ -286,18 +227,83 @@ def run(
 profiles_app = typer.Typer(help="Profile utilities")
 
 
+def _override_profile_dir(cfg, profile_dir: Path | None):
+    if profile_dir:
+        cfg.profile_dir = profile_dir.expanduser()
+    return cfg
+
+
+def _list_profiles_remote(base_url: str, include_versions: bool, prefix: str | None) -> list[str] | dict:
+    import requests
+
+    params = {}
+    if include_versions:
+        params["include_versions"] = "true"
+    if prefix:
+        params["prefix"] = prefix
+    url = f"{base_url.rstrip('/')}/profiles"
+    resp = requests.get(url, params=params, timeout=30)
+    try:
+        data = resp.json()
+    except Exception:
+        data = resp.text
+    if not resp.ok:
+        raise RemoteServiceError(f"Service error: {data}")
+    return data
+
+
 @profiles_app.command("list")
-def profiles_list(ctx: typer.Context) -> None:
+def profiles_list(
+    ctx: typer.Context,
+    mode: Optional[str] = typer.Option(None, "--mode", help="local or remote"),
+    base_url: str = typer.Option("", "--base-url", help="Remote service base URL"),
+    include_versions: bool = typer.Option(False, "--include-versions", help="Show available versions"),
+    prefix: Optional[str] = typer.Option(None, "--prefix", help="Filter profiles by prefix"),
+    profiles_dir: Optional[Path] = typer.Option(None, "--profiles-dir", help="Profiles root (local catalog)"),
+) -> None:
     context: Context = ctx.obj
-    names = profiles.list_profiles(context.config)
-    for name in names:
-        typer.echo(name)
+    effective_mode = mode or context.config.mode
+
+    if effective_mode == "remote":
+        endpoint = base_url or context.config.endpoint_url
+        if not endpoint:
+            _handle_exc(ConfigError("Remote listing requires --base-url or config endpoint"))
+        try:
+            data = _list_profiles_remote(endpoint, include_versions=include_versions, prefix=prefix)
+        except Exception as exc:
+            _handle_exc(exc)
+        if not isinstance(data, dict):
+            _handle_exc(RemoteServiceError("Unexpected response from service"))
+        profiles_list = data.get("profiles", [])
+        versions_map = data.get("versions", {}) if isinstance(data, dict) else {}
+        for name in profiles_list:
+            if include_versions:
+                versions = versions_map.get(name, [])
+                typer.echo(f"{name} (versions: {', '.join(versions) if versions else 'none'})")
+            else:
+                typer.echo(name)
+        return
+
+    cfg = _override_profile_dir(context.config, profiles_dir)
+    bases, versions_map = profiles.list_profiles_with_versions(cfg, prefix=prefix)
+    if include_versions:
+        for base in bases:
+            versions = versions_map.get(base, [])
+            typer.echo(f"{base} (versions: {', '.join(versions) if versions else 'none'})")
+    else:
+        for name in bases:
+            typer.echo(name)
 
 
 @profiles_app.command("show")
-def profiles_show(ctx: typer.Context, profile_name: str = typer.Argument(...)) -> None:
+def profiles_show(
+    ctx: typer.Context,
+    profile_name: str = typer.Argument(...),
+    profiles_dir: Optional[Path] = typer.Option(None, "--profiles-dir", help="Profiles root (local catalog)"),
+) -> None:
     context: Context = ctx.obj
-    profile = profiles.load_profile(profile_name, context.config)
+    cfg = _override_profile_dir(context.config, profiles_dir)
+    profile = profiles.load_profile(profile_name, cfg)
     payload = {
         "name": profile.name,
         "mode": profile.mode,

@@ -22,14 +22,11 @@ pip install "git+https://github.com/diegopereyra99/docflow.git@main#egg=docflow"
 
 Extract locally (CLI):
 ```bash
-# Use your own JSON Schema
-docflow extract --schema path/to/schema.json file1.pdf file2.pdf
-
-# Extract everything (built-in profile)
-docflow extract --all file1.pdf file2.pdf
+# Run a profile (built-in or from your profile store)
+docflow run extract_all file1.pdf file2.pdf
 
 # Describe documents (built-in profile)
-docflow describe file1.pdf
+docflow run describe file1.pdf
 ```
 
 Extract with Python:
@@ -48,10 +45,9 @@ Profiles let you standardize extractions. DocFlow ships with built‑ins under `
 - `extract_all` – broad schema and prompts to pull as much as possible
 - `describe` – concise type/summary output
 
-Resolution order when loading by name:
-1) Project `.docflow/profiles/` (in working directory)
-2) User `~/.docflow/profiles/`
-3) Built‑ins packaged with the SDK
+Profile store (catalog layout):
+- Default local store: `~/.docflow/profiles/profiles/...` unless overridden by `[docflow].profile_dir` or `DOCFLOW_PROFILE_DIR`.
+- Built-ins follow the same layout and are used as a fallback.
 
 Each profile folder contains:
 ```
@@ -68,17 +64,16 @@ See `docs/docflow_profile_spec_v1.md` for the full format.
 The CLI wraps the SDK and supports local or remote modes.
 
 Basic commands:
-- `docflow extract --schema schema.json FILE...` – run schema‑driven extraction
-- `docflow extract --all FILE...` – run the built‑in `extract_all`
-- `docflow describe FILE...` – run `describe`
-- `docflow run PROFILE_NAME FILE...` – run any profile by name
+- `docflow run PROFILE_PATH FILE...` – run any profile (local or remote)
+- `docflow profiles list` – list available profiles (local store or remote if `--mode remote --base-url ...`)
+- `docflow profiles show PROFILE_PATH` – show profile metadata (local)
 
 Common options:
 - `--multi per_file|aggregate|both` – output shape for multiple files
 - `--output-format print|json|excel` – default `print` (Excel exports arrays/objects)
 - `--mode local|remote` and `--base-url http://host:8080` – use the HTTP service
 - Remote service examples:
-  - Per-file: `docflow run importaciones/dua gs://bucket/doc.pdf --mode remote --base-url http://localhost:8080 --service-mode per_file --workers 2`
+  - Per-file: `docflow run importaciones/dua --mode remote --base-url http://localhost:8080 --service-mode per_file --workers 2 gs://bucket/doc.pdf`
   - Grouped: `docflow run importaciones/dua --mode remote --base-url http://localhost:8080 --service-mode grouped --groups-file groups.json`
 
 SDK config file (optional): `~/.docflow/config.toml`

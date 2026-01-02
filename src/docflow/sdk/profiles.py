@@ -10,7 +10,11 @@ from docflow.core.models.profiles import ExtractionProfile
 from docflow.core.models.schema_defs import parse_schema
 from docflow.core.providers.base import ProviderOptions
 from docflow.core.utils.io import load_structured
-from docflow.profile_catalog import CatalogConfig, list_profiles as catalog_list_profiles
+from docflow.profile_catalog import (
+    CatalogConfig,
+    list_profiles as catalog_list_profiles,
+    list_profiles_with_versions as catalog_list_profiles_with_versions,
+)
 from docflow.profile_catalog import load_profile as catalog_load_profile
 from docflow.sdk.config import SdkConfig
 from docflow.sdk.config import load_config
@@ -57,6 +61,35 @@ def list_profiles(config: SdkConfig | None = None) -> List[str]:
     except Exception:
         pass
     return sorted(names)
+
+
+def list_profiles_with_versions(config: SdkConfig | None = None, prefix: str | None = None) -> tuple[list[str], dict[str, list[str]]]:
+    bases: set[str] = set()
+    versions_map: dict[str, set[str]] = {}
+
+    def _merge(b: list[str], vm: dict[str, list[str]]):
+        for base in b:
+            bases.add(base)
+        for k, v in vm.items():
+            versions_map.setdefault(k, set()).update(v)
+
+    cfg = _catalog_config(config)
+    if cfg and cfg.root_dir and cfg.root_dir.exists():
+        try:
+            b, vm = catalog_list_profiles_with_versions(cfg, prefix_filter=prefix)
+            _merge(b, vm)
+        except Exception:
+            pass
+
+    builtin_cfg = _builtin_catalog_config()
+    if builtin_cfg and builtin_cfg.root_dir and builtin_cfg.root_dir.exists():
+        try:
+            b, vm = catalog_list_profiles_with_versions(builtin_cfg, prefix_filter=prefix)
+            _merge(b, vm)
+        except Exception:
+            pass
+
+    return sorted(bases), {k: sorted(list(v)) for k, v in versions_map.items()}
 
 
 def _load_from_catalog(name: str, config: SdkConfig | None) -> ExtractionProfile | None:
