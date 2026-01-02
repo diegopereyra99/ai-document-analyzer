@@ -1,8 +1,0 @@
-id: extract
-mode: extract
-description: "Schema-driven extraction; supply a schema via CLI/SDK."
-schema: null
-prompt: null
-system_instruction: null
-multi_doc_behavior: per_file
-params: {}

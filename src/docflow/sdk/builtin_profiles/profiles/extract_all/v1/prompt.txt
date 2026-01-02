@@ -1,0 +1,7 @@
+Extract as many fields as possible from the document(s).
+
+- Capture single-instance values in "global_fields".
+- Detect repeated structures (tables, lists, repeated blocks) and group them into "record_sets" with consistent field names across rows.
+- Use English, snake_case normalized names (invoice_number, customer_name, line_items, etc.). If you cannot infer a good name, use generic names like field_001, field_002.
+- Keep values as short text; classify value_type when you can. Use null only when a field is missing.
+- Return only valid JSON that matches the provided schema.

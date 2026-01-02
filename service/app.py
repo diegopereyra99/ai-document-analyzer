@@ -3,7 +3,7 @@ from fastapi import FastAPI
 
 from .handlers import events_router, http_router, profiles_router
 
-app = FastAPI(title="DocFlow Service", version="0.1.0")
+app = FastAPI(title="DocFlow Service", version="0.2.1")
 
 
 @app.get("/health")

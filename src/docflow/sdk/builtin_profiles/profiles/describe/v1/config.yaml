@@ -1,0 +1,5 @@
+mode: describe
+multi_doc_behavior: per_file
+generation_config:
+  model_name: gemini-2.5-flash
+  temperature: 0.0

@@ -1,8 +1,0 @@
-id: describe
-mode: describe
-description: "Describe the document type and content tersely."
-schema: ./schemas/describe.json
-prompt: ./prompts/describe.txt
-system_instruction: ./prompts/system_describe.txt
-multi_doc_behavior: per_file
-params: {}

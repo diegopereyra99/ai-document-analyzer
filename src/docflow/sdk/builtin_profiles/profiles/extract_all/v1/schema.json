@@ -1,0 +1,98 @@
+{
+  "type": "object",
+  "properties": {
+    "global_fields": {
+      "type": "array",
+      "description": "Single-instance fields found anywhere in the document (headers, key-value pairs, summary values).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Normalized field name in English, snake_case."
+          },
+          "source_label": {
+            "type": ["string", "null"],
+            "description": "Visible label or heading near the value, if any."
+          },
+          "value": {
+            "description": "Extracted text value.",
+            "type": ["string", "number", "boolean", "null"]
+          },
+          "value_type": {
+            "type": ["string", "null"],
+            "description": "Simple type hint: text, number, date, currency, percentage, code, boolean, other."
+          },
+          "page": {
+            "type": ["integer", "null"],
+            "description": "Page number where the value appears (1-based)."
+          }
+        },
+        "required": ["name", "value"]
+      }
+    },
+
+    "record_sets": {
+      "type": "array",
+      "description": "Repeated structures such as table rows or lists of items.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Normalized name for this record set (e.g., line_items, payments, signatures)."
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "description": "1-based index of the record in the set."
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Normalized field name for this record."
+                      },
+                      "source_label": {
+                        "type": ["string", "null"],
+                        "description": "Visible label or column header, if any."
+                      },
+                      "value": {
+                        "type": ["string", "number", "boolean", "null"],
+                        "description": "Extracted text value."
+                      },
+                      "value_type": {
+                        "type": ["string", "null"],
+                        "description": "Simple type hint: text, number, date, currency, percentage, code, boolean, other."
+                      },
+                      "column": {
+                        "type": ["integer", "null"],
+                        "description": "Column index when derived from a table header."
+                      },
+                      "page": {
+                        "type": ["integer", "null"],
+                        "description": "Page number where the value appears (1-based)."
+                      }
+                    },
+                    "required": ["name", "value"]
+                  }
+                }
+              },
+              "required": ["index", "fields"]
+            }
+          }
+        },
+        "required": ["name", "records"]
+      },
+      "default": []
+    }
+  },
+  "required": ["global_fields"]
+}

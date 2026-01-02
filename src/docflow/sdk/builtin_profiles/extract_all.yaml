@@ -1,8 +1,0 @@
-id: extract_all
-mode: extract
-description: "Extrae la mayor cantidad de información posible (esquema amplio en español)."
-schema: ./schemas/extract_all.json
-prompt: ./prompts/extract_all_es.txt
-system_instruction: ./prompts/system_extract_all_es.txt
-multi_doc_behavior: per_file
-params: {}
