@@ -73,6 +73,41 @@ class RawTextSource:
         return self.name
 
 
+@dataclass
+class HttpSource:
+    """HTTP(S) document source.
+
+    Loads bytes from an http(s) URL. Intended for environments where direct URI
+    attachments to providers are supported; otherwise falls back to downloading
+    the content and attaching bytes.
+    """
+    url: str
+    name: str | None = None
+
+    def load(self) -> bytes:
+        try:
+            import requests  # type: ignore
+        except Exception as exc:  # pragma: no cover
+            raise DocumentError("requests is required for HttpSource") from exc
+
+        try:
+            resp = requests.get(self.url, timeout=60)
+            resp.raise_for_status()
+            return resp.content
+        except Exception as exc:  # pragma: no cover
+            raise DocumentError(f"Failed to download {self.url}: {exc}") from exc
+
+    def display_name(self) -> str:
+        if self.name:
+            return self.name
+        try:
+            from urllib.parse import urlparse
+            path = urlparse(self.url).path
+            return path.rsplit("/", 1)[-1] or self.url
+        except Exception:
+            return self.url
+
+
 def load_content(source: DocSource) -> bytes | str:
     try:
         data = source.load()

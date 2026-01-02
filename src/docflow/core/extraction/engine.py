@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Sequence, Tuple
 
 from .. import config
 from ..errors import DocumentError, ExtractionError
-from ..models.documents import DocSource, load_content
+from ..models.documents import DocSource, load_content, GcsSource, HttpSource, FileSource, RawTextSource
 from ..models.profiles import ExtractionProfile
 from ..models.schema_defs import InternalSchema, normalize_output, parse_schema, validate_output
 from ..providers.base import ModelProvider, ProviderOptions
@@ -111,6 +111,7 @@ def _single_call(
     profile: ExtractionProfile | None,
     system_instruction: str,
     attachments: list[tuple[str, bytes | str]],
+    repair_attempts: int = 0,
 ) -> ExtractionResult:
     data = provider.generate_structured(
         prompt=prompt,
@@ -120,8 +121,42 @@ def _single_call(
         attachments=attachments,
     )
     if internal_schema is not None:
-        validate_output(internal_schema, data)
-        payload = normalize_output(internal_schema, data)
+        try:
+            validate_output(internal_schema, data)
+            payload = normalize_output(internal_schema, data)
+        except Exception as exc:
+            if repair_attempts and repair_attempts > 0:
+                # Minimal repair loop: ask the model to fix invalid JSON against schema.
+                from json import dumps
+
+                last = data
+                error_msg = str(exc)
+                for _ in range(max(1, repair_attempts)):
+                    repair_prompt = (
+                        "You will be given JSON that failed validation against the target schema. "
+                        "Return a corrected JSON that satisfies the schema. Do not include any explanation.\n\n"
+                        f"Validation error:\n{error_msg}\n\nOriginal JSON:\n{dumps(last, indent=2)}\n\n"
+                        "Return only valid JSON."
+                    )
+                    repaired = provider.generate_structured(
+                        prompt=repair_prompt,
+                        schema=internal_schema,
+                        options=options,
+                        system_instruction=system_instruction,
+                        attachments=[],
+                    )
+                    try:
+                        validate_output(internal_schema, repaired)
+                        payload = normalize_output(internal_schema, repaired)
+                        break
+                    except Exception as repair_exc:
+                        last = repaired
+                        error_msg = str(repair_exc)
+                else:
+                    # If loop didn't break, re-raise original error
+                    raise
+            else:
+                raise
     else:
         payload = data
     meta = {
@@ -154,10 +189,18 @@ def extract(
     eff_options = _merge_options(profile, options)
     provider_inst = _provider_or_default(provider)
 
+    # Prepare attachments according to attachment strategy
+    attach_strategy = (eff_options.attachment_strategy if eff_options else None) or "bytes"
     loaded_docs: List[tuple[str, bytes | str]] = []
     for doc in docs:
-        content = load_content(doc)
-        loaded_docs.append((doc.display_name(), content))
+        name = doc.display_name()
+        if attach_strategy == "uri" and isinstance(doc, (GcsSource, HttpSource)):
+            # Pass URI without loading bytes
+            uri = doc.uri if isinstance(doc, GcsSource) else doc.url  # type: ignore[attr-defined]
+            loaded_docs.append((name, uri))
+        else:
+            content = load_content(doc)
+            loaded_docs.append((name, content))
     attachments = loaded_docs
 
     results: List[ExtractionResult] = []
@@ -176,6 +219,7 @@ def extract(
                     profile=profile,
                     system_instruction=sys_inst,
                     attachments=[(name, content)],
+                    repair_attempts=0,
                 )
             )
 
@@ -192,6 +236,7 @@ def extract(
             profile=profile,
             system_instruction=sys_inst,
             attachments=attachments,
+            repair_attempts=0,
         )
 
     if mode == "per_file":
@@ -199,3 +244,71 @@ def extract(
     if mode == "aggregate":
         return aggregate_result or ExtractionResult(data={}, meta={})
     return MultiResult(per_file=results, aggregate=aggregate_result)
+
+
+# --- grouped extraction ---
+
+@dataclass
+class GroupedItemResult:
+    group_id: str
+    result: ExtractionResult
+
+
+@dataclass
+class GroupedResult:
+    groups: List[GroupedItemResult]
+
+    def to_dict(self) -> dict:
+        return {"groups": [{"group_id": g.group_id, "result": g.result.to_dict()} for g in self.groups]}
+
+
+def extract_grouped(
+    docs_groups: Sequence[Tuple[str, Sequence[DocSource]]],
+    schema: InternalSchema | dict | None = None,
+    profile: ExtractionProfile | None = None,
+    provider: ModelProvider | None = None,
+    options: ProviderOptions | None = None,
+    repair_attempts: int = 0,
+) -> GroupedResult:
+    if not docs_groups:
+        raise DocumentError("No groups provided")
+    total_docs = sum(len(g[1]) for g in docs_groups)
+    if total_docs > config.MAX_DOCS_PER_EXTRACTION:
+        raise ExtractionError("Too many documents for a single extraction")
+
+    internal_schema = _resolve_schema(schema, profile)
+    eff_options = _merge_options(profile, options)
+    provider_inst = _provider_or_default(provider)
+
+    items: List[GroupedItemResult] = []
+    for group_id, docs in docs_groups:
+        # Build attachments similar to aggregate mode
+        attach_strategy = (eff_options.attachment_strategy if eff_options else None) or "bytes"
+        attachments: List[tuple[str, bytes | str]] = []
+        doc_names: List[str] = []
+        for doc in docs:
+            name = doc.display_name()
+            doc_names.append(name)
+            if attach_strategy == "uri" and isinstance(doc, (GcsSource, HttpSource)):
+                uri = doc.uri if isinstance(doc, GcsSource) else doc.url  # type: ignore[attr-defined]
+                attachments.append((name, uri))
+            else:
+                content = load_content(doc)
+                attachments.append((name, content))
+
+        prompt, sys_inst = _build_prompt(profile, aggregate=True)
+        result = _single_call(
+            provider_inst,
+            prompt,
+            internal_schema,
+            eff_options,
+            doc_names,
+            mode="grouped",
+            profile=profile,
+            system_instruction=sys_inst,
+            attachments=attachments,
+            repair_attempts=repair_attempts,
+        )
+        items.append(GroupedItemResult(group_id=group_id, result=result))
+
+    return GroupedResult(groups=items)

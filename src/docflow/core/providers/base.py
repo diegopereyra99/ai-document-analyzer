@@ -12,6 +12,10 @@ class ProviderOptions:
     model_name: str | None = None
     temperature: float | None = None
     max_output_tokens: int | None = None
+    # Attachment strategy:
+    # - None or "bytes": load and attach file bytes (current default)
+    # - "uri": pass URIs (gs://, https://, http://) directly to provider when possible
+    attachment_strategy: str | None = None
 
     def merged(self, override: "ProviderOptions | None") -> "ProviderOptions":
         if override is None:
@@ -22,6 +26,7 @@ class ProviderOptions:
             max_output_tokens=self.max_output_tokens
             if override.max_output_tokens is None
             else override.max_output_tokens,
+            attachment_strategy=override.attachment_strategy or self.attachment_strategy,
         )
 
 

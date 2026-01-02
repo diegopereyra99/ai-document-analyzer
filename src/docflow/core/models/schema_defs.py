@@ -80,7 +80,24 @@ def _parse_fields_from_list(items: List[Dict[str, Any]]) -> List[Field]:
     return fields
 
 
+def _is_array_type(t: Any) -> bool:
+    if isinstance(t, str):
+        return t.lower() == "array"
+    if isinstance(t, list):
+        return any(isinstance(x, str) and x.lower() == "array" for x in t)
+    return False
+
+
 def _json_schema_to_internal(raw: Dict[str, Any]) -> InternalSchema:
+    # Top-level array: treat items as a record set named "items" (or title if provided)
+    if _is_array_type(raw.get("type")):
+        items = raw.get("items") or {}
+        if not isinstance(items, dict):
+            raise SchemaError("Array schema requires an 'items' object")
+        rs_fields = _parse_fields_from_properties(items.get("properties", {}) or {}, items.get("required"))
+        rs_name = raw.get("title") or "items"
+        return InternalSchema(global_fields=[], record_sets=[RecordSet(name=rs_name, fields=rs_fields)])
+
     # Expect a JSON-schema-like object shape
     if raw.get("type") not in (None, "object", "OBJECT", "Object") and "properties" not in raw:
         raise SchemaError("Top-level schema must be an object")
@@ -167,13 +184,21 @@ def _is_type_match(expected: str, value: Any) -> bool:
     return True
 
 
-def validate_output(schema: InternalSchema, data: Dict[str, Any]) -> None:
+def _ensure_dict_data(schema: InternalSchema, data: Dict[str, Any] | list[Any]) -> Dict[str, Any]:
+    """Allow top-level list when schema is a single record set."""
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, list) and schema.record_sets and not schema.global_fields and len(schema.record_sets) == 1:
+        return {schema.record_sets[0].name: data}
+    raise SchemaError("Provider output must be a dictionary")
+
+
+def validate_output(schema: InternalSchema, data: Dict[str, Any] | list[Any]) -> None:
     """Minimal sanity checks for provider output.
 
     Raises :class:`SchemaError` if required fields are missing or types are grossly incompatible.
     """
-    if not isinstance(data, dict):
-        raise SchemaError("Provider output must be a dictionary")
+    data = _ensure_dict_data(schema, data)
 
     for field in schema.global_fields:
         if field.required and field.name not in data:
@@ -222,8 +247,10 @@ def _coerce_type(expected: str, value: Any) -> Any:
     return value
 
 
-def normalize_output(schema: InternalSchema, data: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_output(schema: InternalSchema, data: Dict[str, Any] | list[Any]) -> Dict[str, Any]:
     """Normalize provider output and preserve unknown fields under ``extra``."""
+    if isinstance(data, list) and schema.record_sets and not schema.global_fields and len(schema.record_sets) == 1:
+        data = {schema.record_sets[0].name: data}
     if not isinstance(data, dict):
         return {"data": data, "extra": {}}
 

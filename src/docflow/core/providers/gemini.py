@@ -9,6 +9,7 @@ from typing import Any, Dict, Tuple
 from .. import config
 from ..errors import ProviderError
 from ..models.schema_defs import Field, InternalSchema
+from ..utils.vertex_schema import normalize_for_vertex_schema
 from .base import ModelProvider, ProviderOptions
 
 # Suppress noisy Vertex deprecation warning for genai SDK (ignore all UserWarning from module)
@@ -81,6 +82,27 @@ def _guess_mime_and_data(name: str | None, payload: bytes | str) -> Tuple[str, b
     return "text/plain", data
 
 
+def _is_uri_string(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    lower = value.strip().lower()
+    return lower.startswith("gs://") or lower.startswith("http://") or lower.startswith("https://")
+
+
+def _guess_mime_from_name_or_uri(name: str | None, uri_or_name: str) -> str:
+    mime = None
+    target = uri_or_name
+    if name:
+        target = name
+    mime = mimetypes.guess_type(target)[0]
+    if mime:
+        return mime
+    # Fallbacks for common cases
+    if target.lower().endswith(".pdf"):
+        return "application/pdf"
+    return "application/octet-stream"
+
+
 class GeminiProvider(ModelProvider):
     def __init__(self, project: str | None = None, location: str | None = None) -> None:
         self.project = project
@@ -123,13 +145,25 @@ class GeminiProvider(ModelProvider):
                 "max_output_tokens": opts.max_output_tokens,
             }
             if schema is not None:
-                cfg_kwargs["response_schema"] = _internal_to_json_schema(schema)
+                raw_schema = _internal_to_json_schema(schema)
+                cfg_kwargs["response_schema"] = normalize_for_vertex_schema(raw_schema)
             gen_cfg = GenerationConfig(**cfg_kwargs)
             contents: list[Any] = []
             if system_instruction:
                 contents.append(system_instruction)
             contents.append(prompt or "")
+            attach_strategy = (options.attachment_strategy if options else None) or "bytes"
             for name, payload in attachments or []:
+                # When strategy is URI and payload is a URI-like string, use Part.from_uri
+                if attach_strategy == "uri" and _is_uri_string(payload):
+                    mime = _guess_mime_from_name_or_uri(name, str(payload))
+                    try:
+                        contents.append(Part.from_uri(str(payload), mime_type=mime))
+                        continue
+                    except Exception:
+                        # Fall back to data if URI not supported
+                        pass
+                # Default: attach bytes/text
                 mime, data = _guess_mime_and_data(name, payload)
                 try:
                     contents.append(Part.from_data(mime_type=mime, data=data))
