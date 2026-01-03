@@ -9,7 +9,6 @@ from typing import Any, Dict, Tuple
 from .. import config
 from ..errors import ProviderError
 from ..models.schema_defs import Field, InternalSchema
-from ..utils.vertex_schema import normalize_for_vertex_schema
 from .base import ModelProvider, ProviderOptions
 
 # Suppress noisy Vertex deprecation warning for genai SDK (ignore all UserWarning from module)
@@ -113,7 +112,7 @@ class GeminiProvider(ModelProvider):
     def generate_structured(
         self,
         prompt: str,
-        schema: InternalSchema | None,
+        schema: InternalSchema | dict | None,
         options: ProviderOptions | None = None,
         system_instruction: str | None = None,
         attachments: list[tuple[str, bytes | str]] | None = None,
@@ -146,8 +145,7 @@ class GeminiProvider(ModelProvider):
                 "max_output_tokens": opts.max_output_tokens,
             }
             if schema is not None:
-                raw_schema = _internal_to_json_schema(schema)
-                cfg_kwargs["response_schema"] = normalize_for_vertex_schema(raw_schema)
+                cfg_kwargs["response_schema"] = schema if isinstance(schema, dict) else _internal_to_json_schema(schema)
             gen_cfg = GenerationConfig(**cfg_kwargs)
             contents: list[Any] = []
             if system_instruction:

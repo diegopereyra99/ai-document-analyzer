@@ -8,7 +8,7 @@ import requests
 
 from docflow.core.extraction.engine import ExtractionResult, MultiResult, extract
 from docflow.core.models import FileSource
-from docflow.core.models.schema_defs import InternalSchema, parse_schema
+from docflow.core.models.schema_defs import InternalSchema
 from docflow.core.providers.base import ModelProvider, ProviderOptions
 from docflow.core.providers.gemini import GeminiProvider
 from docflow.sdk.errors import ConfigError, RemoteServiceError
@@ -34,36 +34,6 @@ class DocflowClient:
             raise ConfigError("Remote mode requires endpoint_url")
 
     # --- public methods ---
-    def extract(self, schema: dict | InternalSchema, files: List[str | Path], multi_mode: str = "per_file"):
-        profile = load_profile("extract", self.config)
-        return self._execute(
-            schema,
-            files,
-            profile_name=None,
-            profile=profile,
-            multi_mode=multi_mode,
-        )
-
-    def extract_all(self, files: List[str | Path], multi_mode: str = "per_file"):
-        profile = load_profile("extract_all", self.config)
-        return self._execute(
-            schema=None,
-            files=files,
-            profile_name="extract_all",
-            profile=profile,
-            multi_mode=multi_mode,
-        )
-
-    def describe(self, files: List[str | Path], multi_mode: str = "per_file"):
-        profile = load_profile("describe", self.config)
-        return self._execute(
-            schema=None,
-            files=files,
-            profile_name="describe",
-            profile=profile,
-            multi_mode=multi_mode,
-        )
-
     def run_profile(
         self,
         profile_name: str,
@@ -102,7 +72,7 @@ class DocflowClient:
 
     def _execute(
         self,
-        schema: dict | InternalSchema | None,
+        schema: dict | None,
         files: List[str | Path],
         profile_name: str | None,
         profile,
@@ -116,12 +86,9 @@ class DocflowClient:
     ):
         if self.mode == "local":
             sources = self._sources_from_files(files)
-            internal_schema = schema
-            if isinstance(schema, dict):
-                internal_schema = parse_schema(schema)
             return extract(
                 docs=sources,
-                schema=internal_schema,
+                schema=schema,
                 profile=profile,
                 provider=self._provider(),
                 multi_mode=multi_mode,

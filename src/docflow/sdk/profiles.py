@@ -7,7 +7,6 @@ from typing import List, Optional
 
 from docflow.core.errors import ProfileError
 from docflow.core.models.profiles import ExtractionProfile
-from docflow.core.models.schema_defs import parse_schema
 from docflow.core.providers.base import ProviderOptions
 from docflow.core.utils.io import load_structured
 from docflow.profile_catalog import (
@@ -105,7 +104,7 @@ def _load_from_catalog(name: str, config: SdkConfig | None) -> ExtractionProfile
 
     cfg_dict = prof.config if isinstance(prof.config, dict) else {}
     opts = cfg_dict.get("generation_config") if isinstance(cfg_dict, dict) else None
-    mode_val = cfg_dict.get("mode") or "extract"
+    mode_val = cfg_dict.get("mode")
     multi_val = cfg_dict.get("multi_doc_behavior") or cfg_dict.get("multi") or "per_file"
     provider_opts = None
     if isinstance(opts, dict):
@@ -118,7 +117,7 @@ def _load_from_catalog(name: str, config: SdkConfig | None) -> ExtractionProfile
 
     return ExtractionProfile(
         name=prof.path,
-        schema=parse_schema(prof.schema),
+        schema=prof.schema,
         mode=mode_val,
         multi_mode_default=multi_val,
         description=cfg_dict.get("description") if isinstance(cfg_dict, dict) else None,
@@ -161,12 +160,12 @@ def _load_schema_value(value: object, base_dir: Path):
     if value is None:
         return None
     if isinstance(value, dict):
-        return parse_schema(value)
+        return value
     if isinstance(value, str):
         schema_path = Path(value)
         if not schema_path.is_absolute():
             schema_path = (base_dir / schema_path).resolve()
-        return parse_schema(load_structured(schema_path))
+        return load_structured(schema_path)
     raise ProfileError("Schema must be a mapping or a file path")
 
 
@@ -178,7 +177,7 @@ def _load_builtin(name: str) -> ExtractionProfile | None:
             prof = catalog_load_profile(name, cfg)
             cfg_dict = prof.config if isinstance(prof.config, dict) else {}
             opts = cfg_dict.get("generation_config") if isinstance(cfg_dict, dict) else None
-            mode_val = cfg_dict.get("mode") or "extract"
+            mode_val = cfg_dict.get("mode")
             multi_val = cfg_dict.get("multi_doc_behavior") or cfg_dict.get("multi") or "per_file"
             provider_opts = None
             if isinstance(opts, dict):
@@ -190,7 +189,7 @@ def _load_builtin(name: str) -> ExtractionProfile | None:
                 )
             return ExtractionProfile(
                 name=prof.path,
-                schema=parse_schema(prof.schema),
+                schema=prof.schema,
                 mode=mode_val,
                 multi_mode_default=multi_val,
                 description=cfg_dict.get("description") if isinstance(cfg_dict, dict) else None,
@@ -238,7 +237,7 @@ def _load_builtin(name: str) -> ExtractionProfile | None:
     return ExtractionProfile(
         name=doc.get("id") or doc.get("name") or name,
         schema=schema_obj,
-        mode=doc.get("mode") or "extract",
+        mode=doc.get("mode"),
         multi_mode_default=doc.get("multi_doc_behavior") or doc.get("multi") or "per_file",
         description=doc.get("description"),
         provider_options=provider_opts,

@@ -8,7 +8,7 @@ from .. import config
 from ..errors import DocumentError, ExtractionError
 from ..models.documents import DocSource, load_content, GcsSource, HttpSource, FileSource, RawTextSource
 from ..models.profiles import ExtractionProfile
-from ..models.schema_defs import InternalSchema, normalize_output, parse_schema, validate_output
+from ..models.schema_defs import InternalSchema
 from ..providers.base import ModelProvider, ProviderOptions
 from ..providers.gemini import GeminiProvider
 
@@ -36,16 +36,12 @@ class MultiResult:
 
 # --- internal helpers ---
 
-def _resolve_schema(schema: InternalSchema | dict | None, profile: ExtractionProfile | None) -> InternalSchema | None:
-    candidate = None
+def _resolve_schema(schema: dict | None, profile: ExtractionProfile | None) -> dict | None:
     if profile and profile.schema is not None:
-        candidate = profile.schema
-    elif isinstance(schema, dict):
-        candidate = parse_schema(schema)
-    elif isinstance(schema, InternalSchema):
-        candidate = schema
-
-    return candidate
+        return profile.schema
+    if schema is not None:
+        return schema
+    return None
 
 
 def _resolve_multi_mode(profile: ExtractionProfile | None, multi_mode: str | None) -> str:
@@ -104,7 +100,7 @@ def _provider_or_default(provider: ModelProvider | None) -> ModelProvider:
 def _single_call(
     provider: ModelProvider,
     prompt: str,
-    internal_schema: InternalSchema | None,
+    schema: dict | None,
     options: ProviderOptions | None,
     doc_names: List[str],
     mode: str,
@@ -115,50 +111,12 @@ def _single_call(
 ) -> ExtractionResult:
     data = provider.generate_structured(
         prompt=prompt,
-        schema=internal_schema,
+        schema=schema,
         options=options,
         system_instruction=system_instruction,
         attachments=attachments,
     )
-    if internal_schema is not None:
-        try:
-            validate_output(internal_schema, data)
-            payload = normalize_output(internal_schema, data)
-        except Exception as exc:
-            if repair_attempts and repair_attempts > 0:
-                # Minimal repair loop: ask the model to fix invalid JSON against schema.
-                from json import dumps
-
-                last = data
-                error_msg = str(exc)
-                for _ in range(max(1, repair_attempts)):
-                    repair_prompt = (
-                        "You will be given JSON that failed validation against the target schema. "
-                        "Return a corrected JSON that satisfies the schema. Do not include any explanation.\n\n"
-                        f"Validation error:\n{error_msg}\n\nOriginal JSON:\n{dumps(last, indent=2)}\n\n"
-                        "Return only valid JSON."
-                    )
-                    repaired = provider.generate_structured(
-                        prompt=repair_prompt,
-                        schema=internal_schema,
-                        options=options,
-                        system_instruction=system_instruction,
-                        attachments=[],
-                    )
-                    try:
-                        validate_output(internal_schema, repaired)
-                        payload = normalize_output(internal_schema, repaired)
-                        break
-                    except Exception as repair_exc:
-                        last = repaired
-                        error_msg = str(repair_exc)
-                else:
-                    # If loop didn't break, re-raise original error
-                    raise
-            else:
-                raise
-    else:
-        payload = data
+    payload = data
     meta = {
         "model": getattr(provider, "last_model", None) or (options.model_name if options else None),
         "usage": getattr(provider, "last_usage", None),
@@ -173,7 +131,7 @@ def _single_call(
 
 def extract(
     docs: List[DocSource],
-    schema: InternalSchema | dict | None = None,
+    schema: dict | None = None,
     profile: ExtractionProfile | None = None,
     provider: ModelProvider | None = None,
     options: ProviderOptions | None = None,
@@ -185,7 +143,7 @@ def extract(
     if len(docs) > config.MAX_DOCS_PER_EXTRACTION:
         raise ExtractionError("Too many documents for a single extraction")
 
-    internal_schema = _resolve_schema(schema, profile)
+    schema_obj = _resolve_schema(schema, profile)
     mode = _resolve_multi_mode(profile, multi_mode)
     eff_options = _merge_options(profile, options)
     provider_inst = _provider_or_default(provider)
@@ -213,7 +171,7 @@ def extract(
                 _single_call(
                     provider_inst,
                     prompt,
-                    internal_schema,
+                    schema_obj,
                     eff_options,
                     [name],
                     mode="per_file",
@@ -230,7 +188,7 @@ def extract(
         aggregate_result = _single_call(
             provider_inst,
             prompt,
-            internal_schema,
+            schema_obj,
             eff_options,
             [name for name, _ in loaded_docs],
             mode="aggregate",

@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from docflow.core.extraction.engine import extract as df_extract, ExtractionResult as DFExtractionResult
 from docflow.core.models.profiles import ExtractionProfile as DFProfile
-from docflow.core.models.schema_defs import parse_schema as df_parse_schema
 from docflow.core.models.documents import GcsSource as DFGcsSource, HttpSource as DFHttpSource
 from docflow.core.providers.base import ProviderOptions as DFProviderOptions
 from docflow.core.errors import SchemaError as DFSchemaError, ProviderError as DFProviderError, ExtractionError as DFExtractionError, DocumentError as DFDocumentError
@@ -120,11 +119,12 @@ async def extract(payload: ExtractionRequest, cfg: ServiceConfig = Depends(load_
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
-    # Build DocFlow profile + provider
-    df_schema = df_parse_schema(prof.schema)
+    # Build DocFlow profile + provider (keep schema as-is)
+    df_schema = prof.schema if prof.schema else None
     df_profile = DFProfile(
         name=prof.path,
         schema=df_schema,
+        raw_schema=prof.schema,
         mode="extract",
         prompt=prof.prompt,
         system_instruction=prof.system_instruction,
